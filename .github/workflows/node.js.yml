@@ -1,58 +1,85 @@
-name: K6 Load Test
+name: K6 Load Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  k6-test:
+  k6-load-test:
     runs-on: ubuntu-latest
+    env:
+      RESULTS_DIR: results
 
     steps:
+      # 1. Clonar repositorio
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      # 2. Configurar Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'  # Ajusta si tu server.js necesita 18
+          node-version: '18'
+          cache: 'npm'
 
+      # 3. Instalar dependencias
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
-      - name: Start API server
+      # 4. Iniciar el servidor
+      - name: Start application server
         run: |
-          nohup node server.js > server.log 2>&1 &
-          echo $! > server.pid
+          npm start &
+          # Esperar a que el servidor esté listo
+          n=0
+          until curl --output /dev/null --silent --head --fail http://localhost:3000/health || [ $n -ge 10 ]; do
+            echo "Esperando a que el servidor esté listo..."
+            sleep 3
+            n=$((n+1))
+          done
         env:
           PORT: 3000
 
-      - name: Wait for API to be ready
+      # 5. Instalar K6
+      - name: Install K6
         run: |
-          for i in {1..60}; do
-            if curl -s -f http://localhost:3000/health >/dev/null; then
-              echo "API is ready!"
-              exit 0
-            fi
-            echo "Waiting... ($i/60)"
-            sleep 2
-          done
-          echo "API failed to start"
-          cat server.log
-          exit 1
+          curl -L https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xvz
+          sudo mv k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
 
-      - name: Setup k6
-        uses: grafana/setup-k6-action@v1
-        with:
-          k6-version: '0.53.0'  # ← FIX AQUÍ (cambia a la versión actual si prefieres)
-
-      - name: Run K6 Load Test
-        uses: grafana/run-k6-action@v1
-        with:
-          path: load-test.js
+      # 6. Ejecutar tests de carga y generar resultados locales
+      - name: Run K6 Load Tests (JSON)
+        run: |
+          set -e
+          mkdir -p $RESULTS_DIR
+          k6 run \
+            --out json=$RESULTS_DIR/k6-results.json \
+            --summary-export=$RESULTS_DIR/k6-summary.json \
+            tests/load-test.js
         env:
-          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
-          K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
-          K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
-          BASE_URL: http://localhost:3000  # Si tu script lo usa
+          BASE_URL: http://localhost:3000
+
+      # 7. Enviar métricas a Grafana Cloud
+      - name: Export K6 metrics to Grafana Cloud
+        run: |
+          echo "Enviando métricas a Grafana Cloud en $GRAFANA_PROMETHEUS_URL"
+          k6 run --out experimental-prometheus-rw=$GRAFANA_PROMETHEUS_URL tests/load-test.js
+        env:
+          BASE_URL: http://localhost:3000
+          GRAFANA_PROMETHEUS_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
+
+      # 8. Subir resultados locales como artefactos
+      - name: Upload K6 results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-test-results
+          path: $RESULTS_DIR/
+          retention-days: 30
+
+      # 9. Mostrar resumen de prueba
+      - name: Display test summary
+        if: always()
+        run: cat $RESULTS_DIR/k6-summary.json
