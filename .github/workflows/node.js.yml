@@ -12,18 +12,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Clonar el repositorio
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Configurar Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
 
+      # 3. Instalar dependencias
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      # 4. Iniciar el servidor de la aplicación
       - name: Start application server
         run: |
           npm start &
@@ -31,29 +35,35 @@ jobs:
         env:
           PORT: 3000
 
+      # 5. Instalar k6
       - name: Install K6
         run: |
-          curl https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz -L | tar xvz
+          curl -L https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xvz
           sudo mv k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
 
+      # 6. Ejecutar los tests de k6
       - name: Run K6 Load Tests
         run: |
-          mkdir -p results
+          set -e
+          RESULTS_DIR=results
+          mkdir -p $RESULTS_DIR
           k6 run \
-            --out json=results/k6-results.json \
-            --summary-export=results/k6-summary.json \
+            --out json=$RESULTS_DIR/k6-results.json \
+            --summary-export=$RESULTS_DIR/k6-summary.json \
             tests/load-test.js
         env:
           BASE_URL: http://localhost:3000
 
+      # 7. Subir los resultados como artefactos
       - name: Upload K6 results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: k6-test-results
-          path: results/
+          path: $RESULTS_DIR/
           retention-days: 30
 
+      # 8. Mostrar el resumen de la prueba
       - name: Display test summary
         if: always()
-        run: cat results/k6-summary.json
+        run: cat $RESULTS_DIR/k6-summary.json
