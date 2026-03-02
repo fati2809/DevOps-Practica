@@ -1,7 +1,10 @@
 name: K6 Load Test
 
 on:
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
+
 
 jobs:
   k6-test:
