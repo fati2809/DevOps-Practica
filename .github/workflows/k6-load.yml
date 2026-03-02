@@ -9,18 +9,8 @@ jobs:
   k6-test:
     runs-on: ubuntu-latest
 
-    services:
-      api:
-        image: node:18
-        ports:
-          - 3000:3000
-        options: >-
-          --workdir /app
-          -v ${{ github.workspace }}:/app
-        command: bash -c "npm install && node src/server.js"
-
     steps:
-      # 1️⃣ Clonar repositorio
+      # 1️⃣ Clonar el repositorio
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -34,19 +24,35 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Esperar a que la API esté lista
-      - name: Wait for API
-        uses: jakejarvis/wait-on@v0.1.0
-        with:
-          url: http://localhost:3000/health
-          timeout: 30
-
-      # 5️⃣ Ejecutar pruebas K6
-      - name: Run K6 Load Test
-        uses: grafana/k6-action@v0.2.0
-        with:
-          filename: load-test.js
+      # 4️⃣ Iniciar el servidor API en background
+      - name: Start API server
+        run: |
+          nohup npm run start > server.log 2>&1 &
+          echo "Server started in background"
         env:
-          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
-          K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+          PORT: 3000
+
+      # 5️⃣ Esperar que la API esté lista
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:3000/health; then
+              echo "API ready!"
+              break
+            else
+              echo "Waiting for API..."
+              sleep 1
+            fi
+          done
+
+      # 6️⃣ Instalar K6
+      - name: Install K6
+        run: sudo apt-get update && sudo apt-get install -y k6
+
+      # 7️⃣ Ejecutar pruebas K6 y enviar métricas a Grafana
+      - name: Run K6 Load Test
+        run: |
+          k6 run load-test.js \
+            --out experimental-prometheus-rw=${{ secrets.GRAFANA_URL }}:api_key=${{ secrets.GRAFANA_API_KEY }}
+        env:
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
