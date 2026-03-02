@@ -20,14 +20,14 @@ jobs:
         with:
           node-version: '18'
 
-      # 3️⃣ Instalar dependencias
+      # 3️⃣ Instalar dependencias del proyecto
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Iniciar el servidor API en background
+      # 4️⃣ Iniciar el servidor API en segundo plano
       - name: Start API server
         run: |
-          nohup npm run start > server.log 2>&1 &
+          nohup node server.js > server.log 2>&1 &
           echo "Server started in background"
         env:
           PORT: 3000
@@ -45,14 +45,14 @@ jobs:
             fi
           done
 
-      # 6️⃣ Instalar K6
-      - name: Install K6
-        run: sudo apt-get update && sudo apt-get install -y k6
-
-      # 7️⃣ Ejecutar pruebas K6 y enviar métricas a Grafana
+      # 6️⃣ Ejecutar pruebas K6 usando la acción oficial de Grafana
       - name: Run K6 Load Test
-        run: |
-          k6 run load-test.js \
-            --out experimental-prometheus-rw=${{ secrets.GRAFANA_URL }}:api_key=${{ secrets.GRAFANA_API_KEY }}
+        uses: grafana/k6-action@v0.2.0
+        with:
+          filename: load-test.js
         env:
+          # URL de Prometheus Remote Write de Grafana Cloud
+          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
+          # API key generada en Grafana Cloud
+          K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
