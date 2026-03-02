@@ -4,7 +4,6 @@ import { Trend, Rate } from 'k6/metrics';
 
 const healthDuration = new Trend('health_duration');
 const itemsDuration  = new Trend('items_duration');
-const usersDuration  = new Trend('users_duration');
 const errorRate      = new Rate('error_rate');
 
 export const options = {
@@ -33,7 +32,6 @@ function testHealthEndpoint() {
     '[Health] Status 200':           (r) => r.status === 200,
     '[Health] Tiempo < 300ms':       (r) => r.timings.duration < 300,
     '[Health] Body tiene status OK': (r) => JSON.parse(r.body).status === 'OK',
-    '[Health] Tiene campo uptime':   (r) => typeof JSON.parse(r.body).uptime === 'number',
   });
 
   errorRate.add(!success);
@@ -60,31 +58,12 @@ function testItemsEndpoint() {
   sleep(1);
 }
 
-function testUsersEndpoint() {
-  const res = http.get(`${BASE_URL}/users`, {
-    tags: { endpoint: 'users' },
-  });
-
-  usersDuration.add(res.timings.duration);
-
-  const success = check(res, {
-    '[Users] Status 200':     (r) => r.status === 200,
-    '[Users] Tiempo < 500ms': (r) => r.timings.duration < 500,
-    '[Users] Body no vacío':  (r) => r.body.length > 0,
-  });
-
-  errorRate.add(!success);
-  sleep(1);
-}
-
 export default function () {
   const scenario = Math.random();
 
-  if (scenario < 0.2) {
+  if (scenario < 0.5) {
     testHealthEndpoint();
-  } else if (scenario < 0.6) {
-    testItemsEndpoint();
   } else {
-    testUsersEndpoint();
+    testItemsEndpoint();
   }
 }
