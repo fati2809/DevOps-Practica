@@ -62,8 +62,8 @@ jobs:
           k6 run --out experimental-prometheus-rw=$GRAFANA_PROMETHEUS_URL tests/load-test.js
         env:
           BASE_URL: http://localhost:3000
-          # Secret con API Key + /push final
           GRAFANA_PROMETHEUS_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
+
 
       # 8. Subir resultados locales como artefactos
       - name: Upload K6 results
