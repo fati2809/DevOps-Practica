@@ -24,13 +24,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Iniciar el servidor API
+      # 4️⃣ Instalar K6
+      - name: Install K6
+        run: npm install --save-dev k6
+
+      # 5️⃣ Iniciar el servidor API
       - name: Start API server
         run: npm run start &
         env:
           PORT: 3000
 
-      # 5️⃣ Esperar que la API esté lista
+      # 6️⃣ Esperar que la API esté lista
       - name: Wait for API
         run: |
           for i in {1..20}; do
@@ -43,15 +47,10 @@ jobs:
             fi
           done
 
-      # 6️⃣ Ejecutar pruebas K6 y enviar métricas a Grafana Cloud
+      # 7️⃣ Ejecutar pruebas K6 y enviar métricas a Grafana Cloud
       - name: Run K6 Load Test
-        uses: grafana/k6-action@v0.2.0
-        with:
-          filename: load-test.js
+        run: |
+          npx k6 run load-test.js \
+            --out experimental-prometheus-rw=${{ secrets.GRAFANA_URL }}:api_key=${{ secrets.GRAFANA_API_KEY }}
         env:
-          # URL de Grafana Cloud (Prometheus remote write)
-          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
-          # API Key de Grafana Cloud
-          K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
-          # Habilitar métricas como histogramas nativos
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
