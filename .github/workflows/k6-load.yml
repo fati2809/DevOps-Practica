@@ -10,38 +10,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Clonar repositorio
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Instalar Node.js para correr tu API
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      # 3️⃣ Instalar dependencias del proyecto
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Levantar la API en segundo plano
       - name: Start API server
-        run: npm run start &    # Ajusta según tu comando real
+        run: npm run start &   # o el comando que levanta tu API
         env:
           PORT: 3000
 
-      # 5️⃣ Esperar a que la API esté lista
       - name: Wait for API
-        run: sleep 5
+        run: sleep 5  # puedes aumentar si tu API tarda más en arrancar
 
-      # 6️⃣ Ejecutar K6 y enviar métricas a Grafana Cloud
       - name: Run K6 Load Test
         uses: grafana/k6-action@v0.2.0
         with:
           filename: load-test.js
         env:
-          # URL Remote Write de tu Grafana Cloud
-          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_REMOTE_WRITE_URL }}
-          # API Key con permisos RW
+          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
           K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
