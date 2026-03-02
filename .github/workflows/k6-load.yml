@@ -1,39 +1,22 @@
-name: K6 Load Testing Pipeline
+name: K6 Load Test
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
-  load-test:
+  k6-test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Start application
-        run: |
-          npm start &
-          sleep 10
-
-      - name: Install k6
-        run: |
-          sudo apt update
-          sudo apt install -y gnupg
-          curl -s https://dl.k6.io/key.gpg | sudo apt-key add -
-          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt update
-          sudo apt install k6
-
-      - name: Run k6 test and send metrics to Grafana
+      - name: Run k6 test
+        uses: grafana/k6-action@v0.2.0
+        with:
+          filename: load-test.js
         env:
           K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
           K6_PROMETHEUS_RW_USERNAME: ${{ secrets.GRAFANA_USER }}
           K6_PROMETHEUS_RW_PASSWORD: ${{ secrets.GRAFANA_API_KEY }}
-        run: |
-          k6 run -o experimental-prometheus-rw load-test.js
+          K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
