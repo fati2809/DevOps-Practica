@@ -10,6 +10,8 @@ on:
 jobs:
   k6-load-test:
     runs-on: ubuntu-latest
+    env:
+      RESULTS_DIR: results
 
     steps:
       # 1. Clonar el repositorio
@@ -35,17 +37,16 @@ jobs:
         env:
           PORT: 3000
 
-      # 5. Instalar k6
+      # 5. Instalar K6
       - name: Install K6
         run: |
           curl -L https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xvz
           sudo mv k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
 
-      # 6. Ejecutar los tests de k6
+      # 6. Ejecutar los tests de K6
       - name: Run K6 Load Tests
         run: |
           set -e
-          RESULTS_DIR=results
           mkdir -p $RESULTS_DIR
           k6 run \
             --out json=$RESULTS_DIR/k6-results.json \
