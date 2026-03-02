@@ -2,7 +2,7 @@ name: K6 Load Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
@@ -10,49 +10,60 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Clonar el repositorio
+      # 1. Clonar el repositorio
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4   # ¡Actualiza a v4!
 
-      # 2️⃣ Configurar Node.js
+      # 2. Configurar Node.js (usa la versión que tu proyecto necesita, 18 o 20)
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'   # o '18' si tu server.js lo requiere
 
-      # 3️⃣ Instalar dependencias del proyecto
+      # 3. Instalar dependencias
       - name: Install dependencies
-        run: npm install
+        run: npm ci   # npm ci es más limpio y reproducible en CI que npm install
 
-      # 4️⃣ Iniciar el servidor API en segundo plano
+      # 4. Iniciar el servidor en background
       - name: Start API server
         run: |
-          nohup node server.js > server.log 2>&1 &
-          echo "Server started in background"
+          nohup npm start > server.log 2>&1 &   # Mejor si usas "start" en package.json
+          # O si es directamente node: nohup node server.js > server.log 2>&1 &
+          echo $! > server.pid   # Guarda el PID para poder matarlo después si quieres
         env:
           PORT: 3000
 
-      # 5️⃣ Esperar que la API esté lista
-      - name: Wait for API
+      # 5. Esperar a que la API esté lista (mejorado con timeout y más intentos)
+      - name: Wait for API to be ready
         run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:3000/health; then
-              echo "API ready!"
-              break
-            else
-              echo "Waiting for API..."
-              sleep 1
+          for i in {1..60}; do
+            if curl -s -f http://localhost:3000/health >/dev/null; then
+              echo "API is ready!"
+              exit 0
             fi
+            echo "Waiting for API... ($i/60)"
+            sleep 2
           done
+          echo "API failed to start after 120 seconds"
+          cat server.log   # Muestra logs para depurar
+          exit 1
 
-      # 6️⃣ Ejecutar pruebas K6 usando la acción oficial de Grafana
-      - name: Run K6 Load Test
-        uses: grafana/k6-action@v0.2.0
+      # 6. Instalar k6
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
         with:
-          filename: load-test.js
+          k6-version: latest   # o 'v0.53.0' si necesitas versión específica
+
+      # 7. Ejecutar las pruebas k6
+      - name: Run K6 Load Test
+        uses: grafana/run-k6-action@v1
+        with:
+          path: load-test.js   # o filename si la acción lo soporta, pero path es el estándar
+          # args: '--verbose'   # opcional para más logs
         env:
-          # URL de Prometheus Remote Write de Grafana Cloud
+          # Variables para Prometheus Remote Write (Grafana Cloud)
           K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
-          # API key generada en Grafana Cloud
           K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
+          # Opcional: si tu script usa BASE_URL
+          BASE_URL: http://localhost:3000
