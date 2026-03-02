@@ -8,18 +8,16 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:  # Permite ejecución manual
+  workflow_dispatch:
 
 jobs:
   k6-load-test:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Descargar el código del repositorio
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Instalar Node.js y dependencias del proyecto
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -28,16 +26,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 3. Iniciar el servidor de la aplicación en background
       - name: Start application server
         run: |
           npm start &
           sleep 5
         env:
-          NODE_ENV: test
           PORT: 3000
 
-      # 4. Instalar K6
       - name: Install K6
         run: |
           sudo gpg -k
@@ -51,12 +46,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install k6 -y
 
-      # 5. Ejecutar las pruebas de carga con K6
       - name: Run K6 Load Tests
         run: |
+          mkdir -p results
           k6 run \\
             --out json=results/k6-results.json \\
             --summary-export=results/k6-summary.json \\
+            --out experimental-prometheus-rw \\
             tests/load-test.js
         env:
           BASE_URL: http://localhost:3000
@@ -64,7 +60,6 @@ jobs:
           K6_PROMETHEUS_RW_USERNAME: ${{ secrets.GRAFANA_USERNAME }}
           K6_PROMETHEUS_RW_PASSWORD: ${{ secrets.GRAFANA_PASSWORD }}
 
-      # 6. Guardar resultados como artefacto descargable
       - name: Upload K6 results
         uses: actions/upload-artifact@v4
         if: always()
@@ -73,9 +68,48 @@ jobs:
           path: results/
           retention-days: 30
 
-      # 7. Mostrar resumen en el log de Actions
       - name: Display test summary
         if: always()
-        run: |
-          echo "===== RESUMEN DE PRUEBAS K6 ====="
-          cat results/k6-summary.json || echo "No se generó el archivo de resumen"
+        run: cat results/k6-summary.json
+```
+
+---
+
+## 3. Integración GitHub + Grafana (pasos detallados)
+
+### Paso 1 — Grafana Cloud
+Entrar a [grafana.com/auth/sign-up](https://grafana.com/auth/sign-up) y crear una cuenta gratuita. Al terminar el registro te asigna automáticamente un stack con Prometheus incluido.
+
+### Paso 2 — Obtener credenciales de Prometheus
+Dentro de tu stack de Grafana Cloud ir a:
+**Home → Connections → Data sources → grafanacloud-xxx-prom → Settings**
+
+Ahí verás:
+- **URL** del endpoint (algo como `https://prometheus-prod-xx.grafana.net/api/prom/push`)
+- **Username** (un número, ej. `123456`)
+
+Luego generar el token: **Home → My Account → API Keys → Add API Key** con el rol **MetricsPublisher**.
+
+### Paso 3 — Secrets en GitHub
+En tu repositorio ir a **Settings → Secrets and variables → Actions** y crear:
+
+| Secret | Valor |
+|---|---|
+| `GRAFANA_PROMETHEUS_URL` | La URL del paso anterior |
+| `GRAFANA_USERNAME` | El número de usuario |
+| `GRAFANA_PASSWORD` | El API Token generado |
+
+### Paso 4 — Dashboard en Grafana
+Ir a **Dashboards → Import → ID: `2587`** → seleccionar tu datasource de Prometheus → **Import**. Este es el dashboard oficial de K6.
+
+### Paso 5 — Archivos a agregar al proyecto
+```
+FAST-API-DEV/
+├── .github/
+│   └── workflows/
+│       └── k6-load-test.yml   ← NUEVO
+├── tests/
+│   ├── app.test.js            ← ya existe
+│   └── load-test.js           ← NUEVO
+├── results/
+│   └── .gitkeep               ← NUEVO (carpeta vacía trackeada)
