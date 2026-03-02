@@ -43,7 +43,7 @@ jobs:
           curl -L https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xvz
           sudo mv k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
 
-      # 6. Ejecutar los tests de K6
+      # 6. Ejecutar tests de carga y generar resultados locales
       - name: Run K6 Load Tests
         run: |
           set -e
@@ -55,7 +55,22 @@ jobs:
         env:
           BASE_URL: http://localhost:3000
 
-      # 7. Subir los resultados como artefactos
+      # 7. Enviar métricas a Grafana/Prometheus
+      - name: Export K6 metrics to Grafana/Prometheus
+        run: |
+          set -e
+          PROM_URL="https://${GRAFANA_USERNAME}:${GRAFANA_PASSWORD}@${GRAFANA_PROMETHEUS_URL}"
+          echo "Enviando métricas a Prometheus/Grafana en $PROM_URL"
+          k6 run \
+            --out prometheus=$PROM_URL \
+            tests/load-test.js
+        env:
+          BASE_URL: http://localhost:3000
+          GRAFANA_USERNAME: ${{ secrets.GRAFANA_USERNAME }}
+          GRAFANA_PASSWORD: ${{ secrets.GRAFANA_PASSWORD }}
+          GRAFANA_PROMETHEUS_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
+
+      # 8. Subir resultados locales como artefactos
       - name: Upload K6 results
         uses: actions/upload-artifact@v4
         if: always()
@@ -64,7 +79,7 @@ jobs:
           path: $RESULTS_DIR/
           retention-days: 30
 
-      # 8. Mostrar el resumen de la prueba
+      # 9. Mostrar resumen de prueba
       - name: Display test summary
         if: always()
         run: cat $RESULTS_DIR/k6-summary.json
