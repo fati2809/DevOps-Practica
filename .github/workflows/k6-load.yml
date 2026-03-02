@@ -20,17 +20,17 @@ jobs:
         with:
           node-version: '18'
 
-      # 3️⃣ Instalar dependencias del proyecto
+      # 3️⃣ Instalar dependencias
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Levantar API en background
+      # 4️⃣ Iniciar el servidor API
       - name: Start API server
         run: npm run start &
         env:
           PORT: 3000
 
-      # 5️⃣ Esperar a que la API esté lista
+      # 5️⃣ Esperar que la API esté lista
       - name: Wait for API
         run: |
           for i in {1..20}; do
@@ -43,19 +43,10 @@ jobs:
             fi
           done
 
-      # 6️⃣ Instalar K6 localmente
-      - name: Install K6
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gnupg software-properties-common
-          curl -s https://dl.k6.io/key.gpg | sudo apt-key add -
-          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install -y k6
-
-      # 7️⃣ Ejecutar pruebas de carga con K6 y enviar métricas a Grafana
+      # 6️⃣ Ejecutar pruebas K6 y enviar métricas a Grafana Cloud
       - name: Run K6 Load Test
-        run: k6 run load-test.js --out experimental-prometheus-rw=${{ secrets.GRAFANA_URL }}
+        run: |
+          k6 run load-test.js \
+            --out experimental-prometheus-rw=${{ secrets.GRAFANA_URL }}:api_key=${{ secrets.GRAFANA_API_KEY }}
         env:
-          K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
