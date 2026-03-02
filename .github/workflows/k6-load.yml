@@ -1,64 +1,81 @@
-name: K6 Load Test
+name: K6 Load Tests
 
 on:
   push:
-    branches: ["main"]
-  workflow_dispatch:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # Permite ejecución manual
 
 jobs:
-  k6-test:
+  k6-load-test:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clonar el repositorio
+      # 1. Descargar el código del repositorio
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Configurar Node.js
-      - name: Set up Node.js
+      # 2. Instalar Node.js y dependencias del proyecto
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'  # Ajusta a '18' si tu server.js lo requiere
+          node-version: '18'
 
-      # 3. Instalar dependencias
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      # 4. Iniciar el servidor en background
-      - name: Start API server
+      # 3. Iniciar el servidor de la aplicación en background
+      - name: Start application server
         run: |
-          nohup node server.js > server.log 2>&1 &
-          echo $! > server.pid
+          npm start &
+          sleep 5
         env:
+          NODE_ENV: test
           PORT: 3000
 
-      # 5. Esperar que la API esté lista
-      - name: Wait for API to be ready
+      # 4. Instalar K6
+      - name: Install K6
         run: |
-          for i in {1..60}; do
-            if curl -s -f http://localhost:3000/health >/dev/null; then
-              echo "API is ready!"
-              exit 0
-            fi
-            echo "Waiting... ($i/60)"
-            sleep 2
-          done
-          echo "API failed to start after 120 seconds"
-          cat server.log
-          exit 1
+          sudo gpg -k
+          sudo gpg --no-default-keyring \\
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \\
+            --keyserver hkp://keyserver.ubuntu.com:80 \\
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \\
+            https://dl.k6.io/deb stable main" \\
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6 -y
 
-      # 6. Instalar k6
-      - name: Setup k6
-        uses: grafana/setup-k6-action@v1
-        with:
-          k6-version: '0.53.0'  # Versión estable; puedes cambiar a 'latest' o '0.54.0'
-
-      # 7. Ejecutar las pruebas y enviar a Grafana Cloud k6
-      - name: Run K6 Load Test
-        uses: grafana/run-k6-action@v1
-        with:
-          path: load-test.js
-          cloud: true               # ← Envía resultados directamente a Grafana Cloud k6
+      # 5. Ejecutar las pruebas de carga con K6
+      - name: Run K6 Load Tests
+        run: |
+          k6 run \\
+            --out json=results/k6-results.json \\
+            --summary-export=results/k6-summary.json \\
+            tests/load-test.js
         env:
-          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
-          BASE_URL: http://localhost:3000  # Si tu script lo usa (opcional)
+          BASE_URL: http://localhost:3000
+          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
+          K6_PROMETHEUS_RW_USERNAME: ${{ secrets.GRAFANA_USERNAME }}
+          K6_PROMETHEUS_RW_PASSWORD: ${{ secrets.GRAFANA_PASSWORD }}
+
+      # 6. Guardar resultados como artefacto descargable
+      - name: Upload K6 results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-test-results
+          path: results/
+          retention-days: 30
+
+      # 7. Mostrar resumen en el log de Actions
+      - name: Display test summary
+        if: always()
+        run: |
+          echo "===== RESUMEN DE PRUEBAS K6 ====="
+          cat results/k6-summary.json || echo "No se generó el archivo de resumen"
