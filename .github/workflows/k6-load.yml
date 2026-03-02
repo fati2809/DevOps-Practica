@@ -22,12 +22,21 @@ jobs:
         run: npm install
 
       - name: Start API server
-        run: npm run start &   # o el comando que levanta tu API
+        run: npm run start &
         env:
           PORT: 3000
 
       - name: Wait for API
-        run: sleep 5  # puedes aumentar si tu API tarda más en arrancar
+        run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:3000/health; then
+              echo "API ready!"
+              break
+            else
+              echo "Waiting for API..."
+              sleep 1
+            fi
+          done
 
       - name: Run K6 Load Test
         uses: grafana/k6-action@v0.2.0
