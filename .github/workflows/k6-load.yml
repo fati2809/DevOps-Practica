@@ -45,8 +45,13 @@ jobs:
 
       # 6️⃣ Ejecutar pruebas K6 y enviar métricas a Grafana Cloud
       - name: Run K6 Load Test
-        run: |
-          k6 run load-test.js \
-            --out experimental-prometheus-rw=${{ secrets.GRAFANA_URL }}:api_key=${{ secrets.GRAFANA_API_KEY }}
+        uses: grafana/k6-action@v0.2.0
+        with:
+          filename: load-test.js
         env:
+          # URL de Grafana Cloud (Prometheus remote write)
+          K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.GRAFANA_URL }}
+          # API Key de Grafana Cloud
+          K6_PROMETHEUS_RW_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+          # Habilitar métricas como histogramas nativos
           K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
